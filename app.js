@@ -7,7 +7,7 @@ const pets = [
     breed: 'Golden Retriever',
     age: '5 Years',
     owner: 'Emily Carter',
-    clinic: 'Happy Tails Animal Clinic',
+    clinic: 'HappyPaws',
     issue: 'Excessive scratching',
     allergies: 'Pollen',
     medication: 'Apoquel',
@@ -23,7 +23,7 @@ const pets = [
     breed: 'Labrador',
     age: '3 Years',
     owner: 'Emily Carter',
-    clinic: 'Happy Tails Animal Clinic',
+    clinic: 'HappyPaws',
     issue: 'Vaccination due',
     allergies: 'None noted',
     medication: 'N/A',
@@ -39,7 +39,7 @@ const pets = [
     breed: 'Beagle',
     age: '2 Years',
     owner: 'Emily Carter',
-    clinic: 'Happy Tails Animal Clinic',
+    clinic: 'HappyPaws',
     issue: 'Follow-up',
     allergies: 'Chicken',
     medication: 'Probiotic chew',
@@ -96,14 +96,20 @@ const steps = [
   { n: 4, label: 'Confirm' },
 ];
 
+const calendarMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
 const state = {
+  loggedIn: false,
+  loginMode: 'patient',
   mode: 'patient',
   screen: 'patient-dashboard',
-  transitionDirection: 1,
   selectedPetId: 'max',
   selectedDate: 25,
   selectedTime: '2:30 PM',
   selectedService: 'Routine Checkup',
+  calendarMonthIndex: 3,
+  mobileMenuOpen: false,
+  summaryStatus: '',
   checkedIn: {
     contact: true,
     insurance: false,
@@ -116,6 +122,9 @@ const state = {
 let keyboardNavigationBound = false;
 
 const icons = {
+  clock: icon('M12 7.5v5l3 1.8M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'),
+  menu: icon('M5 7h14M5 12h14M5 17h14'),
+  close: icon('M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5'),
   home: icon(
     'M4 11.5 12 5l8 6.5M6.5 10.5V19h11v-8.5M9.5 19v-5h5v5',
   ),
@@ -156,9 +165,13 @@ function shell(content) {
   const mode = modes[state.mode] || modes.patient;
   const visibleScreens = screens.filter((screen) => mode.screens.includes(screen.id));
   return `
-    <div class="app-shell">
+    <div class="app-shell ${state.mobileMenuOpen ? 'mobile-nav-open' : ''}">
+      <button class="mobile-nav-backdrop" data-action="close-mobile-nav" aria-label="Close navigation menu"></button>
       <aside class="sidebar">
         <div class="logo-mark">
+          <button class="mobile-menu-button sidebar-menu-button" data-action="toggle-mobile-nav" aria-expanded="${state.mobileMenuOpen}" aria-label="Toggle navigation menu">
+            ${wrapIcon(state.mobileMenuOpen ? 'close' : 'menu')}
+          </button>
           <span class="badge">${icons.paw}</span>
           <span>PawFlow</span>
         </div>
@@ -167,17 +180,48 @@ function shell(content) {
           ${visibleScreens.map((screen) => navButton(screen.id, screen.label, navIconFor(screen.id))).join('')}
         </div>
         <div class="nav-footer">
-          <button class="nav-button" data-screen="patient-dashboard">${wrapIcon('help')}${'Help'}</button>
-          <button class="nav-button" data-screen="reception-dashboard">${wrapIcon('logout')}${'Log Out'}</button>
+          <button class="nav-button" data-action="logout">${wrapIcon('logout')}${'Log Out'}</button>
         </div>
       </aside>
       <div class="workspace">
         ${topbar()}
         <main class="content">
-          <section class="view view-animate view-${state.transitionDirection > 0 ? 'forward' : 'backward'} ${state.screen === 'patient-dashboard' || state.screen === 'reception-dashboard' ? '' : 'single'}">
+          <section class="view view-animate ${state.screen === 'patient-dashboard' || state.screen === 'reception-dashboard' ? '' : 'single'}">
             ${content}
           </section>
         </main>
+      </div>
+    </div>
+  `;
+}
+
+function loginScreen() {
+  return `
+    <div class="login-shell">
+      <div class="login-card panel">
+        <div class="login-badge">${icons.paw}</div>
+        <div class="login-copy">
+          <p class="login-kicker">PawFlow</p>
+          <h1 class="login-title">Choose a view to continue</h1>
+          <p class="login-text">Pick one of the three workspace views, then enter the prototype in that role.</p>
+        </div>
+
+        <label class="login-field">
+          <span>Workspace view</span>
+          <select class="login-select" data-action="select-login-mode" aria-label="Select workspace view">
+            ${Object.entries(modes)
+              .map(([key, value]) => `<option value="${key}" ${state.loginMode === key ? 'selected' : ''}>${value.label}</option>`)
+              .join('')}
+          </select>
+        </label>
+
+        <div class="login-preview">
+          ${Object.values(modes)
+            .map((mode) => `<span class="pill">${mode.theme}</span>`)
+            .join('')}
+        </div>
+
+        <button class="primary-button login-submit" data-action="login">Enter ${modes[state.loginMode]?.label || modes.patient.label}</button>
       </div>
     </div>
   `;
@@ -187,21 +231,15 @@ function topbar() {
   const mode = modes[state.mode] || modes.patient;
   const visibleScreens = screens.filter((screen) => mode.screens.includes(screen.id));
   const suggestedScreen = getSuggestedScreen(mode, state.screen);
+  const now = systemDateTime();
   return `
     <header class="topbar">
       <div class="topbar-header">
-        <div class="mode-switch" role="tablist" aria-label="Workspace modes">
-          ${Object.entries(modes)
-            .map(([key, value]) => {
-              const active = state.mode === key ? 'active' : '';
-              return `<button class="mode-button ${active}" data-mode="${key}" role="tab" aria-selected="${state.mode === key}">${value.label}</button>`;
-            })
-            .join('')}
-        </div>
         <div class="topbar-meta">
           <span class="pill">${wrapIcon('paw')} ${mode.theme}</span>
           <span class="pill">${wrapIcon('mail')}</span>
-          <span class="avatar-mini" style="${avatarStyle('#8da8c6')}"></span>
+          <span class="pill">${wrapIcon('calendar')} ${now.date}</span>
+          <span class="pill">${wrapIcon('clock')} ${now.time}</span>
         </div>
       </div>
       <div class="topbar-pages">
@@ -214,12 +252,6 @@ function topbar() {
             ${wrapIcon('spark')}
             <span>Suggested: ${suggestedScreen.label}</span>
           </button>
-        </div>
-        <div class="pages-panel">
-          <span class="pages-label">Pages</span>
-          <div class="screen-strip">
-            ${visibleScreens.map((screen) => screenButton(screen)).join('')}
-          </div>
         </div>
       </div>
     </header>
@@ -297,6 +329,21 @@ function avatarStyle(color) {
   return `background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.95), transparent 26%), linear-gradient(135deg, ${color}, #dce8f4);`;
 }
 
+function systemDateTime() {
+  const now = new Date();
+  const date = new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  }).format(now);
+  const time = new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(now);
+
+  return { date, time };
+}
+
 function dogAvatarMarkup(pet) {
   return `<div class="pet-avatar" style="${petAvatarStyle(pet)}"></div>`;
 }
@@ -337,7 +384,7 @@ function patientDashboard() {
           <div>
             <div class="pet-name">${pet.name}</div>
             <div class="pet-meta">Routine Checkup</div>
-            <div class="pet-meta">Happy Tails Animal Clinic</div>
+            <div class="pet-meta">HappyPaws</div>
           </div>
           <div>
             <div class="pet-name" style="text-align: right;">2:30 PM</div>
@@ -351,7 +398,6 @@ function patientDashboard() {
       <div class="card pad">
         <div class="card-title-row">
           <h3 class="card-title">Quick Actions</h3>
-          <span class="pill">${wrapIcon('plus')} Fast lane</span>
         </div>
         <div class="quick-actions" style="margin-top: 12px;">
           <button class="quick-action" data-screen="book-appointment">
@@ -380,7 +426,7 @@ function patientDashboard() {
           <div class="detail"><strong>Checkup</strong><span>2:30 PM</span></div>
           <div class="detail"><strong>Medication</strong><span>Apoquel refill</span></div>
           <div class="detail"><strong>Status</strong><span>Confirmed</span></div>
-          <div class="detail"><strong>Clinic</strong><span>Happy Tails</span></div>
+          <div class="detail"><strong>Clinic</strong><span>HappyPaws</span></div>
         </div>
       </div>
 
@@ -391,7 +437,7 @@ function patientDashboard() {
         </div>
         <div class="info-row">
           <div>
-            <strong>Reminder from Happy Tails</strong>
+            <strong>Reminder from HappyPaws</strong>
             <div class="pet-meta">Please arrive 10 minutes early for check-in.</div>
           </div>
           <span class="status-dot"></span>
@@ -450,6 +496,7 @@ function dateTimeScreen() {
   const pet = petById(state.selectedPetId);
   const days = [31, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30];
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthName = calendarMonths[state.calendarMonthIndex] || 'April';
   return shell(`
     <div class="full-panel panel soft pad">
       <div class="card-title-row">
@@ -474,9 +521,9 @@ function dateTimeScreen() {
         <div class="calendar-layout" style="margin-top: 16px;">
           <div class="calendar-shell">
             <div class="calendar-head">
-              <button class="ghost-button" aria-label="Previous month">←</button>
-              <h3>April 2024</h3>
-              <button class="ghost-button" aria-label="Next month">→</button>
+              <button class="ghost-button" data-action="previous-month" aria-label="Previous month">←</button>
+              <h3>${monthName} 2024</h3>
+              <button class="ghost-button" data-action="next-month" aria-label="Next month">→</button>
             </div>
             <div class="calendar-grid">
               ${weekDays.map((day) => `<div class="weekday">${day}</div>`).join('')}
@@ -498,7 +545,7 @@ function dateTimeScreen() {
                   .join('')}
               </div>
             </div>
-            <div class="note-text">Selected: ${selectedDateLabel(state.selectedDate)} at ${state.selectedTime}</div>
+            <div class="note-text">Selected: ${selectedDateLabel(state.selectedDate, monthName)} at ${state.selectedTime}</div>
           </div>
         </div>
       </div>
@@ -511,8 +558,7 @@ function dateTimeScreen() {
   `);
 }
 
-function selectedDateLabel(date) {
-  const month = 'April';
+function selectedDateLabel(date, month = 'April') {
   return `${month} ${date}, 2024`;
 }
 
@@ -626,7 +672,7 @@ function visitSummaryScreen() {
               <div class="pet-meta">${pet.clinic}</div>
               <div class="pill" style="margin-top: 10px;">${wrapIcon('calendar')} ${selectedDateLabel(state.selectedDate)} - ${state.selectedTime}</div>
             </div>
-            <button class="secondary-button">Email Summary</button>
+            <button class="secondary-button" data-action="email-summary">Email Summary</button>
           </div>
         </div>
 
@@ -656,9 +702,10 @@ function visitSummaryScreen() {
           <div class="card pad">
             <h3 class="card-title">Message the Clinic</h3>
             <textarea class="message-input" readonly>${state.notes}</textarea>
+            ${state.summaryStatus ? `<div class="note-text" style="margin-top: 10px;">${state.summaryStatus}</div>` : ''}
             <div class="footer-actions" style="margin-top: 12px;">
-              <button class="ghost-button">Save Draft</button>
-              <button class="primary-button">Send Message</button>
+              <button class="ghost-button" data-action="save-draft">Save Draft</button>
+              <button class="primary-button" data-action="send-message">Send Message</button>
             </div>
           </div>
         </div>
@@ -679,8 +726,8 @@ function receptionDashboard() {
           </div>
           <div class="hero-actions">
             <button class="primary-button" data-screen="check-in">${wrapIcon('check')} Check-In Patient</button>
-            <button class="secondary-button" data-screen="visit-summary">${wrapIcon('clipboard')} View Schedule</button>
-            <button class="secondary-button">${wrapIcon('search')} Search Records</button>
+            <button class="secondary-button" data-screen="reception-dashboard">${wrapIcon('clipboard')} View Schedule</button>
+            <button class="secondary-button" data-action="search-records">${wrapIcon('search')} Search Records</button>
           </div>
           <div class="hero-name">Front Desk</div>
         </div>
@@ -700,7 +747,7 @@ function receptionDashboard() {
           </div>
           <div class="side-actions">
             <button class="primary-button" data-screen="check-in">Check-In Patient</button>
-            <button class="secondary-button">View Schedule</button>
+            <button class="secondary-button" data-screen="reception-dashboard">View Schedule</button>
           </div>
         </div>
       </div>
@@ -835,7 +882,7 @@ function checkInCompleteScreen() {
             <div class="detail"><strong>Time</strong><span>${state.selectedTime}</span></div>
             <div class="detail"><strong>Veterinarian</strong><span>Dr. Smith</span></div>
             <div class="detail"><strong>Email</strong><span>emily.carter@email.com</span></div>
-            <div class="detail"><strong>Clinic</strong><span>Happy Tails Animal Clinic</span></div>
+            <div class="detail"><strong>Clinic</strong><span>HappyPaws</span></div>
           </div>
         </div>
 
@@ -846,8 +893,8 @@ function checkInCompleteScreen() {
             <div class="info-row"><span>A technician will call them shortly.</span><span class="status-dot"></span></div>
           </div>
           <div class="footer-actions" style="margin-top: 14px;">
-            <button class="secondary-button">${wrapIcon('print')} Print Summary</button>
-            <button class="primary-button">${wrapIcon('send')} Send Confirmation</button>
+            <button class="secondary-button" data-action="print-summary">${wrapIcon('print')} Print Summary</button>
+            <button class="primary-button" data-action="send-confirmation">${wrapIcon('send')} Send Confirmation</button>
           </div>
         </div>
       </div>
@@ -856,6 +903,12 @@ function checkInCompleteScreen() {
 }
 
 function render() {
+  if (!state.loggedIn) {
+    app.innerHTML = loginScreen();
+    bindInteractions();
+    return;
+  }
+
   enforceModeScreen();
   let content = '';
   switch (state.screen) {
@@ -919,11 +972,109 @@ function bindInteractions() {
     keyboardNavigationBound = true;
   }
 
+  document.querySelectorAll('[data-action="toggle-mobile-nav"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.mobileMenuOpen = !state.mobileMenuOpen;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="close-mobile-nav"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.mobileMenuOpen = false;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="select-login-mode"]').forEach((select) => {
+    select.addEventListener('change', () => {
+      state.loginMode = select.value;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="login"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.mode = state.loginMode;
+      state.screen = modes[state.mode]?.defaultScreen || modes.patient.defaultScreen;
+      state.loggedIn = true;
+      state.mobileMenuOpen = false;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="logout"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.loggedIn = false;
+      state.mobileMenuOpen = false;
+      state.summaryStatus = '';
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="previous-month"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.calendarMonthIndex = (state.calendarMonthIndex + 11) % 12;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="next-month"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.calendarMonthIndex = (state.calendarMonthIndex + 1) % 12;
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="email-summary"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const subject = encodeURIComponent('PawFlow Visit Summary');
+      const body = encodeURIComponent(`${state.notes}\n\n${selectedDateLabel(state.selectedDate, calendarMonths[state.calendarMonthIndex] || 'April')} at ${state.selectedTime}`);
+      window.location.href = `mailto:?subject=${subject}&body=${body}`;
+    });
+  });
+
+  document.querySelectorAll('[data-action="save-draft"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.summaryStatus = 'Draft saved.';
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="send-message"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.summaryStatus = 'Message sent.';
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="search-records"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.mode = 'vetTech';
+      state.screen = 'pet-info';
+      render();
+    });
+  });
+
+  document.querySelectorAll('[data-action="print-summary"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      window.print();
+    });
+  });
+
+  document.querySelectorAll('[data-action="send-confirmation"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.summaryStatus = 'Confirmation sent.';
+      render();
+    });
+  });
+
   document.querySelectorAll('[data-mode]').forEach((button) => {
     button.addEventListener('click', () => {
       state.mode = button.dataset.mode;
       state.transitionDirection = 1;
       state.screen = modes[state.mode]?.defaultScreen || modes.patient.defaultScreen;
+      state.mobileMenuOpen = false;
       render();
     });
   });
@@ -936,13 +1087,12 @@ function bindInteractions() {
 
   document.querySelectorAll('[data-screen]').forEach((button) => {
     button.addEventListener('click', () => {
-      const previousScreen = state.screen;
       state.screen = button.dataset.screen;
       const activeMode = Object.entries(modes).find(([, mode]) => mode.screens.includes(state.screen));
       if (activeMode) {
         state.mode = activeMode[0];
       }
-      state.transitionDirection = getScreenIndex(state.screen, state.mode) >= getScreenIndex(previousScreen, state.mode) ? 1 : -1;
+      state.mobileMenuOpen = false;
       render();
     });
   });
@@ -988,14 +1138,15 @@ function navigatePage(direction) {
     visibleScreens.findIndex((screen) => screen.id === state.screen),
   );
   const nextIndex = (currentIndex + direction + visibleScreens.length) % visibleScreens.length;
-  state.transitionDirection = direction >= 0 ? 1 : -1;
   state.screen = visibleScreens[nextIndex].id;
+  state.mobileMenuOpen = false;
   render();
 }
 
-function getScreenIndex(screenId, modeKey) {
-  const mode = modes[modeKey] || modes.patient;
-  return mode.screens.indexOf(screenId);
-}
+setInterval(() => {
+  if (state.loggedIn) {
+    render();
+  }
+}, 60000);
 
 render();
