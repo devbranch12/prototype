@@ -98,6 +98,23 @@ const steps = [
 
 const calendarMonths = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
+function getInitialDarkMode() {
+  try {
+    const savedTheme = window.localStorage.getItem('pawflo-theme');
+    if (savedTheme === 'dark') {
+      return true;
+    }
+
+    if (savedTheme === 'light') {
+      return false;
+    }
+
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch {
+    return false;
+  }
+}
+
 const state = {
   loggedIn: false,
   loginMode: 'patient',
@@ -109,6 +126,7 @@ const state = {
   selectedService: 'Routine Checkup',
   calendarMonthIndex: 3,
   mobileMenuOpen: false,
+  darkMode: getInitialDarkMode(),
   summaryStatus: '',
   checkedIn: {
     contact: true,
@@ -123,8 +141,10 @@ let keyboardNavigationBound = false;
 
 const icons = {
   clock: icon('M12 7.5v5l3 1.8M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'),
-  menu: icon('M5 7h14M5 12h14M5 17h14'),
+  menu: filledMenuIcon(),
   close: icon('M6.5 6.5 17.5 17.5M17.5 6.5 6.5 17.5'),
+  sun: icon('M12 5V3.5M12 20.5V19M18.5 12H20M4 12H5.5M16.6 7.4l1-1M5.4 18.6l1-1M16.6 16.6l1 1M5.4 5.4l1 1M12 16.5a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9Z'),
+  moon: icon('M16.8 14.2A6.6 6.6 0 1 1 9.8 7.2a8.2 8.2 0 0 0 7 7Z'),
   home: icon(
     'M4 11.5 12 5l8 6.5M6.5 10.5V19h11v-8.5M9.5 19v-5h5v5',
   ),
@@ -152,6 +172,10 @@ function icon(pathData) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${pathData}" /></svg>`;
 }
 
+function filledMenuIcon() {
+  return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6.4" width="16" height="3" rx="1.5" fill="currentColor" /><rect x="4" y="10.5" width="16" height="3" rx="1.5" fill="currentColor" /><rect x="4" y="14.6" width="16" height="3" rx="1.5" fill="currentColor" /></svg>`;
+}
+
 function petById(id) {
   return pets.find((pet) => pet.id === id) || pets[0];
 }
@@ -173,7 +197,7 @@ function shell(content) {
             ${wrapIcon(state.mobileMenuOpen ? 'close' : 'menu')}
           </button>
           <span class="badge">${icons.paw}</span>
-          <span>PawFlow</span>
+          <span>PawFlo</span>
         </div>
         <div class="nav-group">
           <div class="nav-label">${mode.theme}</div>
@@ -199,29 +223,28 @@ function loginScreen() {
   return `
     <div class="login-shell">
       <div class="login-card panel">
-        <div class="login-badge">${icons.paw}</div>
+        <div class="login-card-top">
+          <div class="login-badge">${icons.paw}</div>
+          <button class="theme-toggle" data-action="toggle-theme" aria-pressed="${state.darkMode}" aria-label="${state.darkMode ? 'Switch to light mode' : 'Switch to dark mode'}">
+            <span class="theme-toggle-icon">${state.darkMode ? icons.sun : icons.moon}</span>
+            <span>${state.darkMode ? 'Light mode' : 'Dark mode'}</span>
+          </button>
+        </div>
         <div class="login-copy">
-          <p class="login-kicker">PawFlow</p>
-          <h1 class="login-title">Choose a view to continue</h1>
-          <p class="login-text">Pick one of the three workspace views, then enter the prototype in that role.</p>
+          <p class="login-kicker">PawFlo</p>
+          <h1 class="login-title">Login</h1>
+          <p class="login-text">A calm front-desk workflow for receptionists and veterinary technicians, built around fast check-in, clear status tracking, and fewer missed handoffs.</p>
         </div>
 
-        <label class="login-field">
-          <span>Workspace view</span>
-          <select class="login-select" data-action="select-login-mode" aria-label="Select workspace view">
-            ${Object.entries(modes)
-              .map(([key, value]) => `<option value="${key}" ${state.loginMode === key ? 'selected' : ''}>${value.label}</option>`)
-              .join('')}
-          </select>
-        </label>
-
-        <div class="login-preview">
-          ${Object.values(modes)
-            .map((mode) => `<span class="pill">${mode.theme}</span>`)
+        <div class="login-actions" role="group" aria-label="Select workspace view">
+          ${Object.entries(modes)
+            .map(([key, value]) => `
+              <button class="primary-button login-choice ${state.loginMode === key ? 'active' : ''}" data-action="login-mode" data-mode="${key}">
+                ${value.label}
+              </button>
+            `)
             .join('')}
         </div>
-
-        <button class="primary-button login-submit" data-action="login">Enter ${modes[state.loginMode]?.label || modes.patient.label}</button>
       </div>
     </div>
   `;
@@ -241,6 +264,10 @@ function topbar() {
           <span class="pill">${wrapIcon('calendar')} ${now.date}</span>
           <span class="pill">${wrapIcon('clock')} ${now.time}</span>
         </div>
+        <button class="theme-toggle" data-action="toggle-theme" aria-pressed="${state.darkMode}" aria-label="${state.darkMode ? 'Switch to light mode' : 'Switch to dark mode'}">
+          <span class="theme-toggle-icon">${state.darkMode ? icons.sun : icons.moon}</span>
+          <span>${state.darkMode ? 'Light mode' : 'Dark mode'}</span>
+        </button>
       </div>
       <div class="topbar-pages">
         <div class="mode-shortcuts">
@@ -348,20 +375,32 @@ function dogAvatarMarkup(pet) {
   return `<div class="pet-avatar" style="${petAvatarStyle(pet)}"></div>`;
 }
 
+function roleLabel() {
+  if (state.mode === 'receptionist') {
+    return 'Receptionist';
+  }
+
+  if (state.mode === 'vetTech') {
+    return 'Vet Tech';
+  }
+
+  return 'Pet Owner';
+}
+
 function patientDashboard() {
   const pet = petById(state.selectedPetId);
   return shell(`
     <div class="left-panel stack">
       <div class="panel soft">
         <div class="panel-header">
-          <h1 class="panel-title">Welcome, Triv!</h1>
-          <p class="panel-subtitle">A calm, functional prototype for booking, records, and clinic check-in.</p>
+          <h1 class="panel-title">Welcome, ${roleLabel()}!</h1>
+          <p class="panel-subtitle">PawFlo helps staff answer who is here, what their status is, and who needs to act next.</p>
         </div>
         <div class="card hero-card">
           <div class="hero-art"></div>
           <div class="hero-content">
             <div class="hero-headline">
-              <h2>Welcome back, Triv.</h2>
+              <h2>Welcome back, ${roleLabel()}.</h2>
               <p>${pet.name} is ready for a routine checkup.</p>
             </div>
             <div class="hero-actions">
@@ -903,6 +942,7 @@ function checkInCompleteScreen() {
 }
 
 function render() {
+  applyTheme();
   if (!state.loggedIn) {
     app.innerHTML = loginScreen();
     bindInteractions();
@@ -944,6 +984,21 @@ function render() {
   bindInteractions();
 }
 
+function applyTheme() {
+  document.body.dataset.theme = state.darkMode ? 'dark' : 'light';
+  document.documentElement.style.colorScheme = state.darkMode ? 'dark' : 'light';
+}
+
+function toggleTheme() {
+  state.darkMode = !state.darkMode;
+  try {
+    window.localStorage.setItem('pawflo-theme', state.darkMode ? 'dark' : 'light');
+  } catch {
+    // Ignore storage failures and keep the in-memory theme toggle working.
+  }
+  render();
+}
+
 function enforceModeScreen() {
   const mode = modes[state.mode] || modes.patient;
   if (!mode.screens.includes(state.screen)) {
@@ -979,6 +1034,10 @@ function bindInteractions() {
     });
   });
 
+  document.querySelectorAll('[data-action="toggle-theme"]').forEach((button) => {
+    button.addEventListener('click', toggleTheme);
+  });
+
   document.querySelectorAll('[data-action="close-mobile-nav"]').forEach((button) => {
     button.addEventListener('click', () => {
       state.mobileMenuOpen = false;
@@ -986,15 +1045,9 @@ function bindInteractions() {
     });
   });
 
-  document.querySelectorAll('[data-action="select-login-mode"]').forEach((select) => {
-    select.addEventListener('change', () => {
-      state.loginMode = select.value;
-      render();
-    });
-  });
-
-  document.querySelectorAll('[data-action="login"]').forEach((button) => {
+  document.querySelectorAll('[data-action="login-mode"]').forEach((button) => {
     button.addEventListener('click', () => {
+      state.loginMode = button.dataset.mode || state.loginMode;
       state.mode = state.loginMode;
       state.screen = modes[state.mode]?.defaultScreen || modes.patient.defaultScreen;
       state.loggedIn = true;
@@ -1028,7 +1081,7 @@ function bindInteractions() {
 
   document.querySelectorAll('[data-action="email-summary"]').forEach((button) => {
     button.addEventListener('click', () => {
-      const subject = encodeURIComponent('PawFlow Visit Summary');
+      const subject = encodeURIComponent('PawFlo Visit Summary');
       const body = encodeURIComponent(`${state.notes}\n\n${selectedDateLabel(state.selectedDate, calendarMonths[state.calendarMonthIndex] || 'April')} at ${state.selectedTime}`);
       window.location.href = `mailto:?subject=${subject}&body=${body}`;
     });
