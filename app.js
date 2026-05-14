@@ -196,7 +196,9 @@ function shell(content) {
           <button class="mobile-menu-button sidebar-menu-button" data-action="toggle-mobile-nav" aria-expanded="${state.mobileMenuOpen}" aria-label="Toggle navigation menu">
             ${wrapIcon(state.mobileMenuOpen ? 'close' : 'menu')}
           </button>
-          <span class="badge">${icons.paw}</span>
+          <button class="badge" type="button" data-action="go-dashboard" aria-label="Go to dashboard">
+            ${icons.home}
+          </button>
           <span>PawFlo</span>
         </div>
         <div class="nav-group">
@@ -1036,6 +1038,15 @@ function bindInteractions() {
 
   document.querySelectorAll('[data-action="toggle-theme"]').forEach((button) => {
     button.addEventListener('click', toggleTheme);
+  });
+
+  document.querySelectorAll('[data-action="go-dashboard"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const mode = modes[state.mode] || modes.patient;
+      state.screen = mode.defaultScreen;
+      state.mobileMenuOpen = false;
+      render();
+    });
   });
 
   document.querySelectorAll('[data-action="close-mobile-nav"]').forEach((button) => {
